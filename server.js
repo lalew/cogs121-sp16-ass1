@@ -7,19 +7,33 @@ const path = require("path");
 const session = require("express-session");
 const MongoStore = require("connect-mongo")(session);
 
+// Express-handlebars
+var handlebars = require('express-handlebars');
+
 // Require Passport for Twitter
 var passport = require('passport'), 
     TwitterStrategy = require('passport-twitter').Strategy;
 
 // Mongoose
 var mongoose = require('mongoose'),
-Schema = mongoose.Schema;
+    Schema = mongoose.Schema;
 
+require('dotenv').config();
 require("dotenv").load();
 var models = require("./models");
-var db = mongoose.connection;
 
-var router = { /* TODO */};
+var UserSchema = new Schema({
+    twitterID: String,
+    token: String,
+    username: String,
+    displayname: String
+});
+// mongoose.model('User', UserSchema);
+
+//
+var router = { /* TODO */
+    index: require("./routes/index")
+};
 
 var parser = {
     body: require("body-parser"),
@@ -27,9 +41,17 @@ var parser = {
 };
 
 var strategy = { /* TODO */ };
+// var TwitterStrategy = require('passport-github').Strategy;
 
 // Database Connection
 /* TODO */
+var db = mongoose.connection;
+mongoose.connect(process.env.MONGOLAB_URI || 'mongodb://127.0.0.1/cogs121');
+db.on('error', console.error.bind(console, 'Mongo DB Connection Error:'));
+db.once('open', function(callback) {
+    console.log("Database connected successfully.");
+});
+
 
 // session middleware
 var session_middleware = session({
@@ -57,43 +79,45 @@ app.use(passport.session());
 
 /* TODO: Use Twitter Strategy for Passport here */
 // passport.use(new strategy.Twitter({
-//     consumerKey: process.env.TWITTER_CONSUMER_KEY,
-//     consumerSecret: process.env.TWITTER_CONSUMER_SECRET,
-//     callbackURL: "/auth/twitter/callback"
-// }, function(token, token_secret, profile, done) {
-//     models.User.findOne({ "twitterID": profile.id }, function(err, user) {
-//     // (1) Check if there is an error. If so, return done(err);
-//     if (err) {return done(err); }
+passport.use(new TwitterStrategy ({
+    consumerKey: process.env.TWITTER_CONSUMER_KEY,
+    consumerSecret: process.env.TWITTER_CONSUMER_SECRET,
+    callbackURL: "/auth/twitter/callback"
+}, function(token, token_secret, profile, done) {
+    models.User.findOne({ "twitter.id": profile.id }, function(err, user) {
+    // (1) Check if there is an error. If so, return done(err);
+    console.log(user);
+    if (err) {return done(err); }
 
-//     if(!user) {
-//         // (2) since the user is not found, create new user.
-//         // Refer to Assignment 0 to how create a new instance of a model
-//         var newUser = new User();
+    if(!user) {
+        // (2) since the user is not found, create new user.
+        // Refer to Assignment 0 to how create a new instance of a model
+        var newUser = new User();
 
-//         // Pull inputs from Twitter
-//         newUser.twitter.id = profile.id;
-//         newUser.twitter.token = profile.token;
-//         newUser.twitter.username = profile.username;
-//         newUser.twitter.displayName = profile.displayName;
-//         // Save new user into datebase
-//         newUser.save(function(err) {
-//             if (err)
-//                 throw err;
-//         })
-//         return done(null, profile);
-//     } else {
-//         // (3) since the user is found, update user’s information
-//         newUser.twitter.id = profile.id;
-//         newUser.twitter.token = profile.token;
-//         newUser.twitter.username = profile.username;
-//         newUser.twitter.displayName = profile.displayName;
+        // Pull inputs from Twitter
+        newUser.twitter.id = profile.id;
+        newUser.twitter.token = profile.token;
+        newUser.twitter.username = profile.username;
+        newUser.twitter.displayName = profile.displayName;
+        // Save new user into datebase
+        newUser.save(function(err) {
+            if (err)
+                throw err;
+        })
+        return done(null, profile);
+    } else {
+        // (3) since the user is found, update user’s information
+        newUser.twitter.id = profile.id;
+        newUser.twitter.token = profile.token;
+        newUser.twitter.username = profile.username;
+        newUser.twitter.displayName = profile.displayName;
 
-//         process.nextTick(function() {
-//             return done(null, profile);
-//         });
-//     }
-//   });
-// });
+        process.nextTick(function() {
+            return done(null, profile);
+        });
+    }
+  });
+}));
 
 /* TODO: Passport serialization here */
 passport.serializeUser(function(user, done) {
@@ -108,6 +132,15 @@ passport.deserializeUser(function(user, done) {
 // Uncommented after twitter key inputted.
 app.get("/", router.index.view);
 // More routes here if needed
+app.get('/auth/twitter', passport.authenticate('twitter'));
+app.get('/auth/twitter/callback',
+  passport.authenticate('twitter', { successRedirect: '/chat',
+                                     failureRedirect: '/' }));
+app.get('/logout', function(req, res){
+  req.logout();
+  res.redirect('/');
+});
+
 
 // io.use(function(socket, next) {
 //     session_middleware(socket.request, {}, next);
